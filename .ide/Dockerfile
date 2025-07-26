@@ -1,7 +1,7 @@
 # .ide/Dockerfile
 
-# 可将 node 替换为需要的基础镜像
-FROM go:1.24
+# 可将 golang 替换为需要的基础镜像
+FROM golang:1.24
 
 # 安装 code-server 和 vscode 常用插件
 RUN curl -fsSL https://code-server.dev/install.sh | sh \
