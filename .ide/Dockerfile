@@ -21,9 +21,9 @@ RUN curl -fsSL https://code-server.dev/install.sh | sh \
   
 # 安装 ssh 服务，用于支持 VSCode 等客户端通过 Remote-SSH 访问开发环境（也可按需安装其他软件）
 RUN apt-get update && apt-get install -y git wget unzip openssh-server python3 python3-dev curl
-RUN wget https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz && \
-    tar -xJf node-v${NODE_VERSION}-linux-x64.tar.xz -C /usr/local --strip-components=1 && \
-    rm node-${NODE_VERSION}-linux-x64.tar.xz
+RUN wget https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz && \
+    tar -xJf node-v${NODE_VERSION}-linux-x64.tar.gz -C /usr/local --strip-components=1 && \
+    rm node-${NODE_VERSION}-linux-x64.tar.gz
 
 # 指定字符集支持命令行输入中文（根据需要选择字符集）
 ENV LANG C.UTF-8
