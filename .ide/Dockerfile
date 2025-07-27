@@ -3,9 +3,8 @@
 # 可将 golang 替换为需要的基础镜像
 FROM golang:1.24
 
-# 定义你想要安装的 Node.js 主版本
-# 例如：20 (Node.js 20.x), 18 (Node.js 18.x), lts (最新LTS), current (最新当前版本)
-ARG NODE_MAJOR_VERSION=22
+# 定义你想要安装的版本
+ARG NODE_VERSION=22.17.1
 
 # 安装 code-server 和 vscode 常用插件
 RUN curl -fsSL https://code-server.dev/install.sh | sh \
@@ -22,12 +21,9 @@ RUN curl -fsSL https://code-server.dev/install.sh | sh \
   
 # 安装 ssh 服务，用于支持 VSCode 等客户端通过 Remote-SSH 访问开发环境（也可按需安装其他软件）
 RUN apt-get update && apt-get install -y git wget unzip openssh-server python3 python3-dev curl \
-    curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR_VERSION}.x | bash - && \
-    apt-get install -y nodejs && \
-    # 清理不再需要的包和缓存，进一步减小镜像大小
-    apt-get autoremove -y && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    wget https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz && \
+    tar -xJf node-v${NODE_VERSION}-linux-x64.tar.xz -C /usr/local --strip-components=1 && \
+    rm node-${NODE_VERSION}-linux-x64.tar.xz
 
 # 指定字符集支持命令行输入中文（根据需要选择字符集）
 ENV LANG C.UTF-8
