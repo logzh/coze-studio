@@ -23,7 +23,7 @@ RUN curl -fsSL https://code-server.dev/install.sh | sh \
 RUN apt-get update && apt-get install -y git wget unzip openssh-server python3 python3-dev curl
 RUN wget https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz && \
     tar -xzf node-v${NODE_VERSION}-linux-x64.tar.gz -C /usr/local --strip-components=1 && \
-    rm node-${NODE_VERSION}-linux-x64.tar.gz
+    rm node-v${NODE_VERSION}-linux-x64.tar.gz
 
 # 指定字符集支持命令行输入中文（根据需要选择字符集）
 ENV LANG C.UTF-8
