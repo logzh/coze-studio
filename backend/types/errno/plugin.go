@@ -38,6 +38,8 @@ const (
 	ErrPluginToolsCheckFailed             = 109000011
 	ErrPluginParseToolRespFailed          = 109000012
 	ErrPluginOAuthFailed                  = 109000013
+	ErrPluginIDExist                      = 109000014
+	ErrToolIDExist                        = 109000015
 )
 
 const (
@@ -45,6 +47,17 @@ const (
 )
 
 func init() {
+
+	code.Register(
+		ErrPluginIDExist,
+		"Plugin ID already exists : {plugin_id}",
+		code.WithAffectStability(false),
+	)
+	code.Register(
+		ErrToolIDExist,
+		"Tool ID already exists : {tool_id}",
+		code.WithAffectStability(false),
+	)
 	code.Register(
 		ErrPluginPermissionCode,
 		fmt.Sprintf("unauthorized access : {%s}", PluginMsgKey),
@@ -77,7 +90,7 @@ func init() {
 
 	code.Register(
 		ErrPluginRecordNotFound,
-		fmt.Sprintf("record not found"),
+		"record not found",
 		code.WithAffectStability(false),
 	)
 

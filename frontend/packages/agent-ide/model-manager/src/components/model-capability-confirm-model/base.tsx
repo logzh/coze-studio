@@ -13,25 +13,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
- 
+
 import { useState, type FC } from 'react';
 
 import { groupBy } from 'lodash-es';
-import { ToolGroupKey, ToolKey } from '@coze-agent-ide/tool-config';
-import {
-  type useRegisteredToolKeyConfigList,
-  abilityKey2ModelFunctionConfigType,
-} from '@coze-agent-ide/tool';
+import { useBotSkillStore } from '@coze-studio/bot-detail-store/bot-skill';
 import { I18n } from '@coze-arch/i18n';
+import { IconCozCross } from '@coze-arch/coze-design/icons';
+import {
+  Button,
+  Checkbox,
+  Modal,
+  IconButton,
+  Space,
+} from '@coze-arch/coze-design';
 import {
   type Model,
   ModelFuncConfigStatus,
   ModelFuncConfigType,
 } from '@coze-arch/bot-api/developer_api';
-import { useBotSkillStore } from '@coze-studio/bot-detail-store/bot-skill';
+import { ToolGroupKey, ToolKey } from '@coze-agent-ide/tool-config';
+import {
+  type useRegisteredToolKeyConfigList,
+  abilityKey2ModelFunctionConfigType,
+} from '@coze-agent-ide/tool';
 import { mergeModelFuncConfigStatus } from '@coze-agent-ide/bot-editor-context-store';
-import { IconCozCross } from '@coze-arch/coze-design/icons';
-import { Button, Checkbox, Modal, IconButton, Space } from '@coze-arch/coze-design';
 
 type IRegisteredToolKeyConfig = ReturnType<
   typeof useRegisteredToolKeyConfigList
@@ -45,14 +51,14 @@ const getToolGroupText = (key: ToolGroupKey): string =>
     [ToolGroupKey.DIALOG]: I18n.t('bot_edit_type_dialog'),
     [ToolGroupKey.CHARACTER]: I18n.t('bot_edit_type_character'),
     [ToolGroupKey.HOOKS]: 'Hooks',
-  })[key];
+  }[key]);
 
 const getToolText = (toolKey: ToolKey) =>
   ({
     [ToolKey.PLUGIN]: I18n.t('Plugins'),
     [ToolKey.WORKFLOW]: I18n.t('Workflows'),
     [ToolKey.IMAGEFLOW]: I18n.t('imageflow_title'),
-    // 已废弃
+    // Abandoned
     [ToolKey.KNOWLEDGE]: '',
     [ToolKey.VARIABLE]: I18n.t('user_profile'),
     [ToolKey.DATABASE]: I18n.t('bot_database'),
@@ -69,7 +75,7 @@ const getToolText = (toolKey: ToolKey) =>
     [ToolKey.SHORTCUT]: I18n.t('bot_ide_shortcut'),
     [ToolKey.DEV_HOOKS]: 'Hooks',
     [ToolKey.USER_INPUT]: I18n.t('chat_setting_user_input_default_mode'),
-  })[toolKey];
+  }[toolKey]);
 
 const AlertGroups: FC<{ items: AlertItem[] }> = ({ items }) => {
   const grouped = groupBy(items, 'groupTitle');
@@ -167,7 +173,7 @@ export const ModelCapabilityAlertModelContent: FC<{
   );
 };
 
-// TODO 统一封装 localStorage 服务，管理本地缓存的生命周期
+// TODO uniformly encapsulates the localStorage service and manages the lifecycle of the local cache
 export const DONT_SHOW_TIPS_LOCAL_CACHE_KEY =
   'model_capability_check_do_not_show_again';
 
@@ -178,7 +184,7 @@ export const checkModelAbility = (
   toolKeyConfigList.reduce<[AlertItem[], AlertItem[]]>(
     ([notSupportedRes, poorSupportedRes], item) => {
       const { hasValidData, toolKey, toolGroupKey } = item;
-      // 只在当前 tool 存在配置时才需要检查
+      // Check only if the current tool configuration exists
       if (hasValidData) {
         const modelFunctionConfigType =
           abilityKey2ModelFunctionConfigType(toolKey);
@@ -196,6 +202,7 @@ export const checkModelAbility = (
                   : ModelFuncConfigType.KnowledgeOnDemandCall
               ];
             modelFunctionConfigStatus = mergeModelFuncConfigStatus(
+              // @ts-expect-error fix me late
               autoConfigStatus,
               modelFunctionConfigStatus,
             );
@@ -231,7 +238,7 @@ export const confirm = ({
     return new Promise(resolve => {
       const modal = Modal.confirm({
         header: null,
-        // 需要比模型配置的popover默认 z-index 1030 更高，这里进行内卷
+        // It needs to be higher than the default z-index 1030 of the popover configured by the model.
         zIndex: 1031,
         mask: false,
         width: 480,
@@ -263,6 +270,7 @@ export const confirm = ({
 };
 
 const getGroupTittleByConfigType = (type: ModelFuncConfigType): string =>
+  // @ts-expect-error fix me late
   ({
     [ModelFuncConfigType.Plugin]: I18n.t('bot_edit_type_skills'),
     [ModelFuncConfigType.Workflow]: I18n.t('bot_edit_type_skills'),
@@ -288,9 +296,10 @@ const getGroupTittleByConfigType = (type: ModelFuncConfigType): string =>
       'agentflow_transfer_ conversation_settings_title',
     ),
     [ModelFuncConfigType.HookInfo]: 'Hooks',
-  })[type];
+  }[type]);
 
 const getTitleByConfigType = (type: ModelFuncConfigType): string =>
+  // @ts-expect-error fix me late
   ({
     [ModelFuncConfigType.Plugin]: I18n.t('Plugins'),
     [ModelFuncConfigType.Workflow]: I18n.t('Workflows'),
@@ -316,7 +325,7 @@ const getTitleByConfigType = (type: ModelFuncConfigType): string =>
       'agentflow_transfer_ conversation_settings_mode_node_title',
     ),
     [ModelFuncConfigType.HookInfo]: 'Hooks',
-  })[type];
+  }[type]);
 
 export const mapConfigTypeToAlertItem = (
   type: ModelFuncConfigType,

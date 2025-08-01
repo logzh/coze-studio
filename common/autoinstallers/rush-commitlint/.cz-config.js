@@ -3,6 +3,10 @@ const spawn = require('cross-spawn')
 const defaultConfig = require('cz-customizable');
 const { getChangedPackages } = require('./utils')
 
+
+/**
+ * For different types of commit prefix messages
+ */
 const typesConfig = [
   { value: 'feat', name: 'A new feature' },
   { value: 'fix', name: 'A bug fix' },
