@@ -29,8 +29,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/coze-dev/coze-studio/backend/api/model/crossdomain/plugin"
-	workflow3 "github.com/coze-dev/coze-studio/backend/api/model/ocean/cloud/workflow"
-	common "github.com/coze-dev/coze-studio/backend/api/model/plugin_develop_common"
+	common "github.com/coze-dev/coze-studio/backend/api/model/plugin_develop/common"
+	workflow3 "github.com/coze-dev/coze-studio/backend/api/model/workflow"
 	"github.com/coze-dev/coze-studio/backend/application/base/pluginutil"
 	"github.com/coze-dev/coze-studio/backend/domain/plugin/entity"
 	"github.com/coze-dev/coze-studio/backend/domain/plugin/service"
@@ -201,7 +201,7 @@ func (t *pluginService) GetPluginToolsInfo(ctx context.Context, req *crossplugin
 		)
 		if toolExample != nil {
 			requestExample = toolExample.RequestExample
-			responseExample = toolExample.RequestExample
+			responseExample = toolExample.ResponseExample
 		}
 
 		response.ToolInfoList[tf.ID] = crossplugin.ToolInfo{
@@ -218,6 +218,63 @@ func (t *pluginService) GetPluginToolsInfo(ctx context.Context, req *crossplugin
 
 	}
 	return response, nil
+}
+
+func (t *pluginService) UnwrapArrayItemFieldsInVariable(v *vo.Variable) error {
+	if v == nil {
+		return nil
+	}
+
+	if v.Type == vo.VariableTypeObject {
+		subVars, ok := v.Schema.([]*vo.Variable)
+		if !ok {
+			return nil
+		}
+
+		newSubVars := make([]*vo.Variable, 0, len(subVars))
+		for _, subVar := range subVars {
+			if subVar.Name == "[Array Item]" {
+				if err := t.UnwrapArrayItemFieldsInVariable(subVar); err != nil {
+					return err
+				}
+				// If the array item is an object, append its children
+				if subVar.Type == vo.VariableTypeObject {
+					if innerSubVars, ok := subVar.Schema.([]*vo.Variable); ok {
+						newSubVars = append(newSubVars, innerSubVars...)
+					}
+				} else {
+					// If the array item is a primitive type, clear its name and append it
+					subVar.Name = ""
+					newSubVars = append(newSubVars, subVar)
+				}
+			} else {
+				// For other sub-variables, recursively unwrap and append
+				if err := t.UnwrapArrayItemFieldsInVariable(subVar); err != nil {
+					return err
+				}
+				newSubVars = append(newSubVars, subVar)
+			}
+		}
+		v.Schema = newSubVars
+
+	} else if v.Type == vo.VariableTypeList {
+		if v.Schema != nil {
+			subVar, ok := v.Schema.(*vo.Variable)
+			if !ok {
+				return nil
+			}
+
+			if err := t.UnwrapArrayItemFieldsInVariable(subVar); err != nil {
+				return err
+			}
+			// If the array item definition itself has "[Array Item]" name, clear it
+			if subVar.Name == "[Array Item]" {
+				subVar.Name = ""
+			}
+			v.Schema = subVar
+		}
+	}
+	return nil
 }
 
 func (t *pluginService) GetPluginInvokableTools(ctx context.Context, req *crossplugin.ToolsInvokableRequest) (
@@ -275,8 +332,15 @@ func (t *pluginService) ExecutePlugin(ctx context.Context, input map[string]any,
 		return nil, vo.WrapError(errno.ErrSerializationDeserializationFail, err)
 	}
 
+	var uID string
+	if cfg.AgentID != nil {
+		uID = cfg.ConnectorUID
+	} else {
+		uID = conv.Int64ToStr(cfg.Operator)
+	}
+
 	req := &service.ExecuteToolRequest{
-		UserID:          conv.Int64ToStr(cfg.Operator),
+		UserID:          uID,
 		PluginID:        pe.PluginID,
 		ToolID:          toolID,
 		ExecScene:       plugin.ExecSceneOfWorkflow,
@@ -327,7 +391,7 @@ func (t *pluginService) ExecutePlugin(ctx context.Context, input map[string]any,
 	}
 
 	var output map[string]any
-	err = sonic.UnmarshalString(r.RawResp, &output)
+	err = sonic.UnmarshalString(r.TrimmedResp, &output)
 	if err != nil {
 		return nil, vo.WrapError(errno.ErrSerializationDeserializationFail, err)
 	}

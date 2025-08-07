@@ -20,11 +20,11 @@ import (
 	"context"
 
 	"github.com/cloudwego/eino/compose"
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
+	"github.com/cloudwego/eino/callbacks"
+
 	"github.com/coze-dev/coze-studio/backend/application/internal"
-	"github.com/coze-dev/coze-studio/backend/pkg/logs"
 
 	wfdatabase "github.com/coze-dev/coze-studio/backend/crossdomain/workflow/database"
 	wfknowledge "github.com/coze-dev/coze-studio/backend/crossdomain/workflow/knowledge"
@@ -46,17 +46,20 @@ import (
 	crosssearch "github.com/coze-dev/coze-studio/backend/domain/workflow/crossdomain/search"
 	crossvariable "github.com/coze-dev/coze-studio/backend/domain/workflow/crossdomain/variable"
 	"github.com/coze-dev/coze-studio/backend/domain/workflow/service"
+	workflowservice "github.com/coze-dev/coze-studio/backend/domain/workflow/service"
+	"github.com/coze-dev/coze-studio/backend/infra/contract/cache"
 	"github.com/coze-dev/coze-studio/backend/infra/contract/coderunner"
 	"github.com/coze-dev/coze-studio/backend/infra/contract/idgen"
 	"github.com/coze-dev/coze-studio/backend/infra/contract/imagex"
 	"github.com/coze-dev/coze-studio/backend/infra/contract/modelmgr"
 	"github.com/coze-dev/coze-studio/backend/infra/contract/storage"
+	"github.com/coze-dev/coze-studio/backend/pkg/logs"
 )
 
 type ServiceComponents struct {
 	IDGen              idgen.IDGenerator
 	DB                 *gorm.DB
-	Cache              *redis.Client
+	Cache              cache.Cmdable
 	DatabaseDomainSVC  dbservice.Database
 	VariablesDomainSVC variables.Variables
 	PluginDomainSVC    plugin.PluginService
@@ -77,6 +80,9 @@ func InitService(ctx context.Context, components *ServiceComponents) (*Applicati
 	if !ok {
 		logs.CtxWarnf(ctx, "workflow builtin chat model for knowledge recall not configured")
 	}
+
+	service.RegisterAllNodeAdaptors()
+
 	workflowRepo := service.NewWorkflowRepository(components.IDGen, components.DB, components.Cache,
 		components.Tos, components.CPStore, bcm)
 	workflow.SetRepository(workflowRepo)
@@ -90,6 +96,7 @@ func InitService(ctx context.Context, components *ServiceComponents) (*Applicati
 	crossmodel.SetManager(wfmodel.NewModelManager(components.ModelManager, nil))
 	crosscode.SetCodeRunner(components.CodeRunner)
 	crosssearch.SetNotifier(wfsearch.NewNotify(components.DomainNotifier))
+	callbacks.AppendGlobalHandlers(workflowservice.GetTokenCallbackHandler())
 
 	SVC.DomainSVC = workflowDomainSVC
 	SVC.ImageX = components.ImageX

@@ -58,6 +58,11 @@ import (
 	"github.com/coze-dev/coze-studio/backend/types/consts"
 )
 
+func TestMain(m *testing.M) {
+	RegisterAllNodeAdaptors()
+	m.Run()
+}
+
 func TestIntentDetectorAndDatabase(t *testing.T) {
 	mockey.PatchConvey("intent detector & database custom sql", t, func() {
 		data, err := os.ReadFile("../examples/intent_detector_database_custom_sql.json")
@@ -655,11 +660,10 @@ func TestKnowledgeNodes(t *testing.T) {
 		mockKnowledgeOperator.EXPECT().Retrieve(gomock.Any(), gomock.Any()).Return(rResponse, nil)
 		mockGlobalAppVarStore := mockvar.NewMockStore(ctrl)
 		mockGlobalAppVarStore.EXPECT().Get(gomock.Any(), gomock.Any()).Return("v1", nil).AnyTimes()
-		mockGlobalAppVarStore.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
-		variable.SetVariableHandler(&variable.Handler{
-			AppVarStore: mockGlobalAppVarStore,
-		})
+		variable.SetVariableHandler(&variable.Handler{AppVarStore: mockGlobalAppVarStore})
+
+		mockey.Mock(execute.GetAppVarStore).Return(&execute.AppVariables{Vars: map[string]any{}}).Build()
 
 		ctx := t.Context()
 		ctx = ctxcache.Init(ctx)
