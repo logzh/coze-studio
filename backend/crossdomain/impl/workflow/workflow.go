@@ -19,10 +19,14 @@ package workflow
 import (
 	"context"
 
+	"github.com/cloudwego/eino/compose"
 	einoCompose "github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 
-	"github.com/coze-dev/coze-studio/backend/crossdomain/contract/crossworkflow"
+	model "github.com/coze-dev/coze-studio/backend/api/model/crossdomain/plugin"
+	crossworkflow "github.com/coze-dev/coze-studio/backend/crossdomain/contract/workflow"
 	"github.com/coze-dev/coze-studio/backend/domain/workflow"
+	"github.com/coze-dev/coze-studio/backend/domain/workflow/entity"
 	workflowEntity "github.com/coze-dev/coze-studio/backend/domain/workflow/entity"
 	"github.com/coze-dev/coze-studio/backend/domain/workflow/entity/vo"
 	"github.com/coze-dev/coze-studio/backend/pkg/lang/ptr"
@@ -64,12 +68,16 @@ func (i *impl) ReleaseApplicationWorkflows(ctx context.Context, appID int64, con
 func (i *impl) WithResumeToolWorkflow(resumingEvent *workflowEntity.ToolInterruptEvent, resumeData string, allInterruptEvents map[string]*workflowEntity.ToolInterruptEvent) einoCompose.Option {
 	return i.DomainSVC.WithResumeToolWorkflow(resumingEvent, resumeData, allInterruptEvents)
 }
-func (i *impl) SyncExecuteWorkflow(ctx context.Context, config vo.ExecuteConfig, input map[string]any) (*workflowEntity.WorkflowExecution, vo.TerminatePlan, error) {
+func (i *impl) SyncExecuteWorkflow(ctx context.Context, config model.ExecuteConfig, input map[string]any) (*workflowEntity.WorkflowExecution, vo.TerminatePlan, error) {
 	return i.DomainSVC.SyncExecute(ctx, config, input)
 }
 
-func (i *impl) WithExecuteConfig(cfg vo.ExecuteConfig) einoCompose.Option {
+func (i *impl) WithExecuteConfig(cfg model.ExecuteConfig) einoCompose.Option {
 	return i.DomainSVC.WithExecuteConfig(cfg)
+}
+
+func (i *impl) WithMessagePipe() (compose.Option, *schema.StreamReader[*entity.Message]) {
+	return i.DomainSVC.WithMessagePipe()
 }
 
 func (i *impl) GetWorkflowIDsByAppID(ctx context.Context, appID int64) ([]int64, error) {
