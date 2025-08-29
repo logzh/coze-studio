@@ -1,6 +1,5 @@
 name: coze-studio
-x-env-file: &env_file
-  - .env
+# Environment file will be specified via --env-file parameter
 
 services:
   mysql:
@@ -12,56 +11,14 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-opencoze}
       MYSQL_USER: ${MYSQL_USER:-coze}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-coze123}
-    env_file: *env_file
     # ports:
     #   - '3306'
     volumes:
       - ./data/mysql:/var/lib/mysql
       - ./volumes/mysql/schema.sql:/docker-entrypoint-initdb.d/init.sql
-      - ./atlas/opencoze_latest_schema.hcl:/opencoze_latest_schema.hcl:ro
-    entrypoint:  
-      - bash
-      - -c
-      - |
-        /usr/local/bin/docker-entrypoint.sh mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci &
-        MYSQL_PID=$$!
-
-        echo 'Waiting for MySQL to start...'
-        until mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} --silent 2>/dev/null; do
-          echo 'MySQL is starting...'
-          sleep 2
-        done
-
-        echo 'Waiting for workflow_version table to exist...'
-        while true; do
-          if mysql -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} $${MYSQL_DATABASE} -e "SHOW TABLES LIKE 'workflow_version';" 2>/dev/null | grep -q "workflow_version"; then
-            echo 'Found workflow_version table, continuing...'
-            break
-          else
-            echo 'workflow_version table not found, retrying in 2 seconds...'
-            sleep 2
-          fi
-        done
-  
-        echo 'MySQL is ready, installing Atlas CLI...'
-
-        if ! command -v atlas >/dev/null 2>&1; then
-          echo 'Installing Atlas CLI...'
-          curl -sSf https://atlasgo.sh | sh -s -- -y --community
-          export PATH=$$PATH:/root/.local/bin
-        else
-          echo 'Atlas CLI already installed'
-        fi
-        
-        if [ -f '/opencoze_latest_schema.hcl' ]; then
-          echo 'Running Atlas migrations...'
-          ATLAS_URL="mysql://$${MYSQL_USER}:$${MYSQL_PASSWORD}@localhost:3306/$${MYSQL_DATABASE}"
-          atlas schema apply -u "$ATLAS_URL" --to "file:///opencoze_latest_schema.hcl" --exclude "atlas_schema_revisions,table_*" --auto-approve
-          echo 'Atlas migrations completed successfully'
-        else
-          echo 'No migrations found'
-        fi
-        wait $$MYSQL_PID
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
     healthcheck:
       test:
         [
@@ -86,7 +43,6 @@ services:
     restart: always
     user: root
     privileged: true
-    env_file: *env_file
     environment:
       - REDIS_AOF_ENABLED=${REDIS_AOF_ENABLED:-no}
       - REDIS_PORT_NUMBER=${REDIS_PORT_NUMBER:-6379}
@@ -119,7 +75,6 @@ services:
     restart: always
     user: root
     privileged: true
-    env_file: *env_file
     environment:
       - TEST=1
       # Add Java certificate trust configuration
@@ -161,7 +116,7 @@ services:
 
           # Download plugin package locally
           echo 'Copying smartcn plugin...';
-          cp /opt/bitnami/elasticsearch/analysis-smartcn.zip /tmp/analysis-smartcn.zip 
+          cp /opt/bitnami/elasticsearch/analysis-smartcn.zip /tmp/analysis-smartcn.zip
 
           elasticsearch-plugin install file:///tmp/analysis-smartcn.zip
           if [[ "$$?" != "0" ]]; then
@@ -206,7 +161,6 @@ services:
     user: root
     privileged: true
     restart: always
-    env_file: *env_file
     # ports:
     #   - '9000'
     #   - '9001'
@@ -217,7 +171,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
-      MINIO_DEFAULT_BUCKETS: ${STORAGE_BUCKET:-opencoze},${MINIO_DEFAULT_BUCKETS:-milvus}
+      MINIO_DEFAULT_BUCKETS: ${STORAGE_BUCKET:-opencoze},${MINIO_DEFAULT_BUCKETS:-oceanbase}
     entrypoint:
       - /bin/sh
       - -c
@@ -259,7 +213,6 @@ services:
     user: root
     restart: always
     privileged: true
-    env_file: *env_file
     environment:
       - ETCD_AUTO_COMPACTION_MODE=revision
       - ETCD_AUTO_COMPACTION_RETENTION=1000
@@ -289,47 +242,37 @@ services:
     networks:
       - coze-network
 
-  milvus:
-    container_name: coze-milvus
-    image: milvusdb/milvus:v2.5.10
-    user: root
-    privileged: true
+  # OceanBase for vector storage
+  oceanbase:
+    image: oceanbase/oceanbase-ce:latest
+    container_name: coze-oceanbase
     restart: always
-    env_file: *env_file
-    command: >
-      bash -c "
-        # Set proper permissions for data directories
-        chown -R root:root /var/lib/milvus
-        chmod g+s /var/lib/milvus
-
-        exec milvus run standalone
-      "
-    security_opt:
-      - seccomp:unconfined
     environment:
-      ETCD_ENDPOINTS: etcd:2379
-      MINIO_ADDRESS: minio:9000
-      MINIO_BUCKET_NAME: ${MINIO_DEFAULT_BUCKETS:-milvus}
-      MINIO_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
-      MINIO_USE_SSL: false
-      LOG_LEVEL: debug
+      MODE: SLIM
+      OB_DATAFILE_SIZE: 1G
+      OB_SYS_PASSWORD: ${OCEANBASE_PASSWORD:-coze123}
+      OB_TENANT_PASSWORD: ${OCEANBASE_PASSWORD:-coze123}
+    ports:
+      - '2881:2881'
     volumes:
-      - ./data/milvus:/var/lib/milvus:rw,Z
+      - ./data/oceanbase/ob:/root/ob
+      - ./data/oceanbase/cluster:/root/.obd/cluster
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:9091/healthz']
-      interval: 5s
+      test:
+        [
+          'CMD-SHELL',
+          'obclient -h127.0.0.1 -P2881 -uroot@test -pcoze123 -e "SELECT 1;"',
+        ]
+      interval: 10s
+      retries: 30
+      start_period: 30s
       timeout: 10s
-      retries: 10
-      start_period: 10s
-    # ports:
-    #   - '19530'
-    #   - '9091'
-    depends_on:
-      etcd:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
     networks:
       - coze-network
   nsqlookupd:
@@ -389,7 +332,6 @@ services:
     image: cozedev/coze-studio-server:latest
     restart: always
     container_name: coze-server
-    env_file: *env_file
     # environment:
     #   LISTEN_ADDR: 0.0.0.0:8888
     networks:
@@ -410,7 +352,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      milvus:
+      oceanbase:
         condition: service_healthy
     command: ['/app/opencoze']
 
