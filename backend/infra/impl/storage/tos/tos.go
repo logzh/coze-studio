@@ -22,20 +22,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/volcengine/ve-tos-golang-sdk/v2/tos"
 	"github.com/volcengine/ve-tos-golang-sdk/v2/tos/enum"
 
-	"github.com/coze-dev/coze-studio/backend/infra/contract/imagex"
 	"github.com/coze-dev/coze-studio/backend/infra/contract/storage"
 	"github.com/coze-dev/coze-studio/backend/infra/impl/storage/proxy"
-	"github.com/coze-dev/coze-studio/backend/pkg/ctxcache"
 	"github.com/coze-dev/coze-studio/backend/pkg/lang/conv"
 	"github.com/coze-dev/coze-studio/backend/pkg/logs"
-	"github.com/coze-dev/coze-studio/backend/types/consts"
 )
 
 type tosClient struct {
@@ -43,11 +39,12 @@ type tosClient struct {
 	bucketName string
 }
 
-func NewStorageImagex(ctx context.Context, ak, sk, bucketName, endpoint, region string) (imagex.ImageX, error) {
+func New(ctx context.Context, ak, sk, bucketName, endpoint, region string) (storage.Storage, error) {
 	t, err := getTosClient(ctx, ak, sk, bucketName, endpoint, region)
 	if err != nil {
 		return nil, err
 	}
+	// t.test()
 	return t, nil
 }
 
@@ -69,25 +66,26 @@ func getTosClient(ctx context.Context, ak, sk, bucketName, endpoint, region stri
 	if err != nil {
 		return nil, err
 	}
-	return t, nil
-}
 
-func New(ctx context.Context, ak, sk, bucketName, endpoint, region string) (storage.Storage, error) {
-	t, err := getTosClient(ctx, ak, sk, bucketName, endpoint, region)
-	if err != nil {
-		return nil, err
-	}
-	// t.test()
 	return t, nil
 }
 
 func (t *tosClient) test() {
+	// test list objects
+	ctx := context.Background()
+
 	// test upload
 	objectKey := fmt.Sprintf("test-%s.txt", time.Now().Format("20060102150405"))
-	err := t.PutObject(context.Background(), objectKey, []byte("hello world"))
+	err := t.PutObject(context.Background(), objectKey, []byte("hello world"), storage.WithTagging(map[string]string{
+		"uid":             "7543149965070155780",
+		"conversation_id": "7543149965070155781",
+		"type":            "user",
+	}))
 	if err != nil {
 		logs.CtxErrorf(context.Background(), "PutObject failed, objectKey: %s, err: %v", objectKey, err)
 	}
+
+	t.ListAllObjects(ctx, "", true)
 
 	// test download
 	content, err := t.GetObject(context.Background(), objectKey)
@@ -129,7 +127,7 @@ func (t *tosClient) CheckAndCreateBucket(ctx context.Context) error {
 	if serverErr.StatusCode == http.StatusNotFound {
 		// Bucket does not exist
 		logs.CtxInfof(ctx, "Bucket not found.")
-		resp, err := client.CreateBucketV2(context.Background(), &tos.CreateBucketV2Input{
+		resp, err := client.CreateBucketV2(ctx, &tos.CreateBucketV2Input{
 			Bucket: bucketName,
 			ACL:    enum.ACLPrivate,
 		})
@@ -182,7 +180,12 @@ func (t *tosClient) PutObjectWithReader(ctx context.Context, objectKey string, c
 		input.ContentLength = option.ObjectSize
 	}
 
+	if len(option.Tagging) > 0 {
+		input.Meta = option.Tagging
+	}
+
 	_, err := client.PutObjectV2(ctx, input)
+
 	return err
 }
 
@@ -246,47 +249,99 @@ func (t *tosClient) GetObjectUrl(ctx context.Context, objectKey string, opts ...
 	return output.SignedUrl, nil
 }
 
-func (i *tosClient) GetUploadHost(ctx context.Context) string {
-	currentHost, ok := ctxcache.Get[string](ctx, consts.HostKeyInCtx)
-	if !ok {
-		return ""
+func (t *tosClient) ListObjectsPaginated(ctx context.Context, input *storage.ListObjectsPaginatedInput) (*storage.ListObjectsPaginatedOutput, error) {
+	if input == nil {
+		return nil, fmt.Errorf("input cannot be nil")
 	}
-	return currentHost + consts.ApplyUploadActionURI
-}
-
-func (t *tosClient) GetServerID() string {
-	return ""
-}
-
-func (t *tosClient) GetUploadAuth(ctx context.Context, opt ...imagex.UploadAuthOpt) (*imagex.SecurityToken, error) {
-	scheme := strings.ToLower(os.Getenv(consts.StorageUploadHTTPScheme))
-	if scheme == "" {
-		scheme = "http"
+	if input.PageSize <= 0 {
+		return nil, fmt.Errorf("page size must be positive")
 	}
-	return &imagex.SecurityToken{
-		AccessKeyID:     "",
-		SecretAccessKey: "",
-		SessionToken:    "",
-		ExpiredTime:     time.Now().Add(time.Hour).Format("2006-01-02 15:04:05"),
-		CurrentTime:     time.Now().Format("2006-01-02 15:04:05"),
-		HostScheme:      scheme,
-	}, nil
-}
 
-func (t *tosClient) GetResourceURL(ctx context.Context, uri string, opts ...imagex.GetResourceOpt) (*imagex.ResourceURL, error) {
-	url, err := t.GetObjectUrl(ctx, uri)
+	output, err := t.client.ListObjectsV2(ctx, &tos.ListObjectsV2Input{
+		Bucket: t.bucketName,
+		ListObjectsInput: tos.ListObjectsInput{
+			MaxKeys:   int(input.PageSize),
+			Marker:    input.Cursor,
+			Prefix:    input.Prefix,
+			FetchMeta: input.WithTagging,
+		},
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list objects failed, err: %w", err)
 	}
-	return &imagex.ResourceURL{
-		URL: url,
+
+	files := make([]*storage.FileInfo, 0, len(output.Contents))
+	for _, obj := range output.Contents {
+		if obj.Size == 0 && strings.HasSuffix(obj.Key, "/") {
+			logs.CtxDebugf(ctx, "[ListObjectsPaginated] skip dir: %s", obj.Key)
+			continue
+		}
+
+		var tagging map[string]string
+		if obj.Meta != nil {
+			obj.Meta.Range(func(key, value string) bool {
+				if tagging == nil {
+					tagging = make(map[string]string)
+				}
+				tagging[key] = value
+				return true
+			})
+		}
+
+		files = append(files, &storage.FileInfo{
+			Key:          obj.Key,
+			LastModified: obj.LastModified,
+			ETag:         obj.ETag,
+			Size:         obj.Size,
+			Tagging:      tagging,
+		})
+	}
+
+	return &storage.ListObjectsPaginatedOutput{
+		Files:       files,
+		Cursor:      output.NextMarker,
+		IsTruncated: output.IsTruncated,
 	}, nil
 }
 
-func (t *tosClient) Upload(ctx context.Context, data []byte, opts ...imagex.UploadAuthOpt) (*imagex.UploadResult, error) {
-	return nil, nil
-}
+func (t *tosClient) ListAllObjects(ctx context.Context, prefix string, withTagging bool) ([]*storage.FileInfo, error) {
+	const (
+		DefaultPageSize = 100
+		MaxListObjects  = 10000
+	)
 
-func (t *tosClient) GetUploadAuthWithExpire(ctx context.Context, expire time.Duration, opt ...imagex.UploadAuthOpt) (*imagex.SecurityToken, error) {
-	return nil, nil
+	files := make([]*storage.FileInfo, 0, DefaultPageSize)
+	cursor := ""
+
+	for {
+		output, err := t.ListObjectsPaginated(ctx, &storage.ListObjectsPaginatedInput{
+			Prefix:      prefix,
+			PageSize:    DefaultPageSize,
+			Cursor:      cursor,
+			WithTagging: withTagging,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list objects failed, prefix = %v, err: %v", prefix, err)
+		}
+
+		for _, object := range output.Files {
+			logs.CtxDebugf(ctx, "key = %s, lastModified = %s, eTag = %s, size = %d, tagging = %v",
+				object.Key, object.LastModified, object.ETag, object.Size, object.Tagging)
+			files = append(files, object)
+		}
+
+		cursor = output.Cursor
+		logs.CtxDebugf(ctx, "IsTruncated = %v, Cursor = %s", output.IsTruncated, output.Cursor)
+
+		if len(files) >= MaxListObjects {
+			logs.CtxErrorf(ctx, "[ListObjects] max list objects reached, total: %d", len(files))
+			break
+		}
+
+		if !output.IsTruncated || output.Cursor == "" {
+			break
+		}
+	}
+
+	return files, nil
 }

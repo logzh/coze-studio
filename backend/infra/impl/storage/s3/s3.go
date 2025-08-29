@@ -21,21 +21,19 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/coze-dev/coze-studio/backend/infra/contract/imagex"
 	"github.com/coze-dev/coze-studio/backend/infra/contract/storage"
 	"github.com/coze-dev/coze-studio/backend/infra/impl/storage/proxy"
-	"github.com/coze-dev/coze-studio/backend/pkg/ctxcache"
-	"github.com/coze-dev/coze-studio/backend/pkg/errorx"
 	"github.com/coze-dev/coze-studio/backend/pkg/logs"
-	"github.com/coze-dev/coze-studio/backend/types/consts"
-	"github.com/coze-dev/coze-studio/backend/types/errno"
+	"github.com/coze-dev/coze-studio/backend/pkg/taskgroup"
 )
 
 type s3Client struct {
@@ -43,7 +41,7 @@ type s3Client struct {
 	bucketName string
 }
 
-func NewStorageImagex(ctx context.Context, ak, sk, bucketName, endpoint, region string) (imagex.ImageX, error) {
+func New(ctx context.Context, ak, sk, bucketName, endpoint, region string) (storage.Storage, error) {
 	t, err := getS3Client(ctx, ak, sk, bucketName, endpoint, region)
 	if err != nil {
 		return nil, err
@@ -87,14 +85,6 @@ func getS3Client(ctx context.Context, ak, sk, bucketName, endpoint, region strin
 		return nil, err
 	}
 
-	return t, nil
-}
-
-func New(ctx context.Context, ak, sk, bucketName, endpoint, region string) (storage.Storage, error) {
-	t, err := getS3Client(ctx, ak, sk, bucketName, endpoint, region)
-	if err != nil {
-		return nil, err
-	}
 	return t, nil
 }
 
@@ -191,6 +181,11 @@ func (t *s3Client) PutObjectWithReader(ctx context.Context, objectKey string, co
 		input.ContentLength = aws.Int64(option.ObjectSize)
 	}
 
+	if option.Tagging != nil {
+		tagging := mapToQueryParams(option.Tagging)
+		input.Tagging = aws.String(tagging)
+	}
+
 	// upload object
 	_, err := client.PutObject(ctx, input)
 	return err
@@ -252,47 +247,140 @@ func (t *s3Client) GetObjectUrl(ctx context.Context, objectKey string, opts ...s
 	return req.URL, nil
 }
 
-func (i *s3Client) GetUploadHost(ctx context.Context) string {
-	currentHost, ok := ctxcache.Get[string](ctx, consts.HostKeyInCtx)
-	if !ok {
-		return ""
+func (t *s3Client) ListAllObjects(ctx context.Context, prefix string, withTagging bool) ([]*storage.FileInfo, error) {
+	const (
+		DefaultPageSize = 100
+		MaxListObjects  = 10000
+	)
+
+	var files []*storage.FileInfo
+	var cursor string
+	for {
+		output, err := t.ListObjectsPaginated(ctx, &storage.ListObjectsPaginatedInput{
+			Prefix:      prefix,
+			PageSize:    DefaultPageSize,
+			WithTagging: withTagging,
+			Cursor:      cursor,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		cursor = output.Cursor
+
+		files = append(files, output.Files...)
+
+		if len(files) >= MaxListObjects {
+			logs.CtxErrorf(ctx, "list objects failed, max list objects: %d", MaxListObjects)
+			break
+		}
+
+		if !output.IsTruncated {
+			break
+		}
 	}
-	return currentHost + consts.ApplyUploadActionURI
+
+	return files, nil
 }
 
-func (t *s3Client) GetServerID() string {
-	return ""
-}
-
-func (t *s3Client) GetUploadAuth(ctx context.Context, opt ...imagex.UploadAuthOpt) (*imagex.SecurityToken, error) {
-	scheme, ok := ctxcache.Get[string](ctx, consts.RequestSchemeKeyInCtx)
-	if !ok {
-		return nil, errorx.New(errno.ErrUploadHostSchemaNotExistCode)
+func (t *s3Client) ListObjectsPaginated(ctx context.Context, input *storage.ListObjectsPaginatedInput) (*storage.ListObjectsPaginatedOutput, error) {
+	if input == nil {
+		return nil, fmt.Errorf("input cannot be nil")
 	}
-	return &imagex.SecurityToken{
-		AccessKeyID:     "",
-		SecretAccessKey: "",
-		SessionToken:    "",
-		ExpiredTime:     time.Now().Add(time.Hour).Format("2006-01-02 15:04:05"),
-		CurrentTime:     time.Now().Format("2006-01-02 15:04:05"),
-		HostScheme:      scheme,
-	}, nil
-}
+	if input.PageSize <= 0 {
+		return nil, fmt.Errorf("page size must be positive")
+	}
 
-func (t *s3Client) GetResourceURL(ctx context.Context, uri string, opts ...imagex.GetResourceOpt) (*imagex.ResourceURL, error) {
-	url, err := t.GetObjectUrl(ctx, uri)
+	client := t.client
+	bucket := t.bucketName
+
+	listObjectsInput := &s3.ListObjectsV2Input{
+		Bucket:            aws.String(bucket),
+		Prefix:            aws.String(input.Prefix),
+		MaxKeys:           aws.Int32(int32(input.PageSize)),
+		ContinuationToken: aws.String(input.Cursor),
+	}
+
+	p, err := client.ListObjectsV2(ctx, listObjectsInput)
 	if err != nil {
 		return nil, err
 	}
-	return &imagex.ResourceURL{
-		URL: url,
-	}, nil
+
+	var files []*storage.FileInfo
+	for _, obj := range p.Contents {
+		f := &storage.FileInfo{}
+		if obj.Key != nil {
+			f.Key = *obj.Key
+		}
+		if obj.LastModified != nil {
+			f.LastModified = *obj.LastModified
+		}
+		if obj.ETag != nil {
+			f.ETag = *obj.ETag
+		}
+		if obj.Size != nil {
+			f.Size = *obj.Size
+		}
+		files = append(files, f)
+	}
+
+	output := &storage.ListObjectsPaginatedOutput{
+		Files: files,
+	}
+	if p.IsTruncated != nil {
+		output.IsTruncated = *p.IsTruncated
+	}
+	if p.NextContinuationToken != nil {
+		output.Cursor = *p.NextContinuationToken
+	}
+
+	if input.WithTagging {
+		taskGroup := taskgroup.NewTaskGroup(ctx, 5)
+		for idx := range files {
+			f := files[idx]
+			taskGroup.Go(func() error {
+				tagging, err := client.GetObjectTagging(ctx, &s3.GetObjectTaggingInput{
+					Bucket: aws.String(bucket),
+					Key:    aws.String(f.Key),
+				})
+				if err != nil {
+					return err
+				}
+
+				f.Tagging = tagsToMap(tagging.TagSet)
+				return nil
+			})
+		}
+
+		if err := taskGroup.Wait(); err != nil {
+			return nil, err
+		}
+	}
+
+	return output, nil
 }
 
-func (t *s3Client) Upload(ctx context.Context, data []byte, opts ...imagex.UploadAuthOpt) (*imagex.UploadResult, error) {
-	return nil, nil
+func mapToQueryParams(tagging map[string]string) string {
+	if len(tagging) == 0 {
+		return ""
+	}
+	params := url.Values{}
+	for k, v := range tagging {
+		params.Set(k, v)
+	}
+	return params.Encode()
 }
 
-func (t *s3Client) GetUploadAuthWithExpire(ctx context.Context, expire time.Duration, opt ...imagex.UploadAuthOpt) (*imagex.SecurityToken, error) {
-	return nil, nil
+func tagsToMap(tags []types.Tag) map[string]string {
+	if len(tags) == 0 {
+		return nil
+	}
+	m := make(map[string]string, len(tags))
+	for _, tag := range tags {
+		if tag.Key != nil && tag.Value != nil {
+			m[*tag.Key] = *tag.Value
+		}
+	}
+	return m
 }

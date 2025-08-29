@@ -91,6 +91,36 @@ func (mr *MockStorageMockRecorder) GetObjectUrl(ctx, objectKey any, opts ...any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetObjectUrl", reflect.TypeOf((*MockStorage)(nil).GetObjectUrl), varargs...)
 }
 
+// ListAllObjects mocks base method.
+func (m *MockStorage) ListAllObjects(ctx context.Context, prefix string, withTagging bool) ([]*storage.FileInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListAllObjects", ctx, prefix, withTagging)
+	ret0, _ := ret[0].([]*storage.FileInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListAllObjects indicates an expected call of ListAllObjects.
+func (mr *MockStorageMockRecorder) ListAllObjects(ctx, prefix, withTagging any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListAllObjects", reflect.TypeOf((*MockStorage)(nil).ListAllObjects), ctx, prefix, withTagging)
+}
+
+// ListObjectsPaginated mocks base method.
+func (m *MockStorage) ListObjectsPaginated(ctx context.Context, input *storage.ListObjectsPaginatedInput) (*storage.ListObjectsPaginatedOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListObjectsPaginated", ctx, input)
+	ret0, _ := ret[0].(*storage.ListObjectsPaginatedOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListObjectsPaginated indicates an expected call of ListObjectsPaginated.
+func (mr *MockStorageMockRecorder) ListObjectsPaginated(ctx, input any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListObjectsPaginated", reflect.TypeOf((*MockStorage)(nil).ListObjectsPaginated), ctx, input)
+}
+
 // PutObject mocks base method.
 func (m *MockStorage) PutObject(ctx context.Context, objectKey string, content []byte, opts ...storage.PutOptFn) error {
 	m.ctrl.T.Helper()
