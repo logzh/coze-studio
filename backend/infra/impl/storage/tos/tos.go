@@ -30,7 +30,6 @@ import (
 
 	"github.com/coze-dev/coze-studio/backend/infra/contract/storage"
 	"github.com/coze-dev/coze-studio/backend/infra/impl/storage/internal/fileutil"
-	"github.com/coze-dev/coze-studio/backend/infra/impl/storage/internal/proxy"
 	"github.com/coze-dev/coze-studio/backend/pkg/goutil"
 	"github.com/coze-dev/coze-studio/backend/pkg/lang/conv"
 	"github.com/coze-dev/coze-studio/backend/pkg/logs"
@@ -247,19 +246,24 @@ func (t *tosClient) GetObjectUrl(ctx context.Context, objectKey string, opts ...
 	client := t.client
 	bucketName := t.bucketName
 
+	opt := storage.GetOption{}
+	for _, optFn := range opts {
+		optFn(&opt)
+	}
+
+	expire := int64(7 * 24 * 60 * 60)
+	if opt.Expire > 0 {
+		expire = opt.Expire
+	}
+
 	output, err := client.PreSignedURL(&tos.PreSignedURLInput{
 		HTTPMethod: enum.HttpMethodGet,
-		Expires:    60 * 60 * 24,
+		Expires:    expire,
 		Bucket:     bucketName,
 		Key:        objectKey,
 	})
 	if err != nil {
 		return "", err
-	}
-
-	ok, proxyURL := proxy.CheckIfNeedReplaceHost(ctx, output.SignedUrl)
-	if ok {
-		return proxyURL, nil
 	}
 
 	return output.SignedUrl, nil
@@ -389,7 +393,7 @@ func (t *tosClient) HeadObject(ctx context.Context, objectKey string, opts ...st
 	if err != nil {
 		if serverErr, ok := err.(*tos.TosServerError); ok {
 			if serverErr.StatusCode == http.StatusNotFound {
-				return nil, nil
+				return nil, storage.ErrObjectNotFound
 			}
 		}
 		return nil, err

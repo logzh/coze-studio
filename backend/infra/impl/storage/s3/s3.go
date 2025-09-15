@@ -32,7 +32,6 @@ import (
 
 	"github.com/coze-dev/coze-studio/backend/infra/contract/storage"
 	"github.com/coze-dev/coze-studio/backend/infra/impl/storage/internal/fileutil"
-	"github.com/coze-dev/coze-studio/backend/infra/impl/storage/internal/proxy"
 	"github.com/coze-dev/coze-studio/backend/pkg/goutil"
 	"github.com/coze-dev/coze-studio/backend/pkg/logs"
 	"github.com/coze-dev/coze-studio/backend/pkg/taskgroup"
@@ -230,19 +229,24 @@ func (t *s3Client) GetObjectUrl(ctx context.Context, objectKey string, opts ...s
 	bucket := t.bucketName
 	presignClient := s3.NewPresignClient(client)
 
+	opt := storage.GetOption{}
+	for _, optFn := range opts {
+		optFn(&opt)
+	}
+
+	expire := int64(60 * 60 * 24)
+	if opt.Expire > 0 {
+		expire = opt.Expire
+	}
+
 	req, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(objectKey),
 	}, func(options *s3.PresignOptions) {
-		options.Expires = time.Duration(60*60*24) * time.Second
+		options.Expires = time.Duration(expire) * time.Second
 	})
 	if err != nil {
 		return "", fmt.Errorf("get object presigned url failed: %v", err)
-	}
-
-	ok, proxyURL := proxy.CheckIfNeedReplaceHost(ctx, req.URL)
-	if ok {
-		return proxyURL, nil
 	}
 
 	return req.URL, nil
@@ -381,7 +385,7 @@ func (t *s3Client) HeadObject(ctx context.Context, objectKey string, opts ...sto
 	if err != nil {
 		var nsk *types.NotFound
 		if errors.As(err, &nsk) {
-			return nil, nil
+			return nil, storage.ErrObjectNotFound
 		}
 		return nil, err
 	}

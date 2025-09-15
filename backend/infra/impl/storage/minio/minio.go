@@ -30,7 +30,6 @@ import (
 
 	"github.com/coze-dev/coze-studio/backend/infra/contract/storage"
 	"github.com/coze-dev/coze-studio/backend/infra/impl/storage/internal/fileutil"
-	"github.com/coze-dev/coze-studio/backend/infra/impl/storage/internal/proxy"
 	"github.com/coze-dev/coze-studio/backend/pkg/logs"
 )
 
@@ -232,12 +231,6 @@ func (m *minioClient) GetObjectUrl(ctx context.Context, objectKey string, opts .
 		return "", fmt.Errorf("GetObjectUrl failed: %v", err)
 	}
 
-	// logs.CtxDebugf(ctx, "[GetObjectUrl] origin presignedURL.String = %s", presignedURL.String())
-	ok, proxyURL := proxy.CheckIfNeedReplaceHost(ctx, presignedURL.String())
-	if ok {
-		return proxyURL, nil
-	}
-
 	return presignedURL.String(), nil
 }
 
@@ -317,7 +310,7 @@ func (m *minioClient) HeadObject(ctx context.Context, objectKey string, opts ...
 	stat, err := m.client.StatObject(ctx, m.bucketName, objectKey, minio.StatObjectOptions{})
 	if err != nil {
 		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
-			return nil, nil
+			return nil, storage.ErrObjectNotFound
 		}
 
 		return nil, fmt.Errorf("HeadObject failed for key %s: %w", objectKey, err)
