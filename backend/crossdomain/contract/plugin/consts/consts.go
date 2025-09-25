@@ -14,14 +14,16 @@
  * limitations under the License.
  */
 
-package plugin
+package consts
 
 import "github.com/getkin/kin-openapi/openapi3"
 
 type PluginType string
 
 const (
-	PluginTypeOfCloud PluginType = "openapi"
+	PluginTypeOfCloud  PluginType = "openapi"
+	PluginTypeOfMCP    PluginType = "coze-studio-mcp"
+	PluginTypeOfCustom PluginType = "coze-studio-custom"
 )
 
 type AuthzType string
@@ -124,4 +126,13 @@ type InterruptEventType string
 
 const (
 	InterruptEventTypeOfToolNeedOAuth InterruptEventType = "tool_need_oauth"
+)
+
+// MIME Type
+const (
+	MediaTypeJson           = "application/json"
+	MediaTypeProblemJson    = "application/problem+json"
+	MediaTypeFormURLEncoded = "application/x-www-form-urlencoded"
+	MediaTypeXYaml          = "application/x-yaml"
+	MediaTypeYaml           = "application/yaml"
 )

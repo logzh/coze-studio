@@ -14,21 +14,17 @@
  * limitations under the License.
  */
 
-package plugin
+package env
 
 import (
-	model "github.com/coze-dev/coze-studio/backend/api/model/crossdomain/plugin"
-	"github.com/coze-dev/coze-studio/backend/domain/plugin/entity"
+	"os"
+	"strings"
 )
 
-type CopyPluginRequest struct {
-	PluginID    int64
-	UserID      int64
-	CopyScene   model.CopyScene
-	TargetAPPID *int64
-}
-
-type CopyPluginResponse struct {
-	Plugin *entity.PluginInfo
-	Tools  map[int64]*entity.ToolInfo // old tool id -> new tool id
+func GetServerHost() string {
+	host := os.Getenv("SERVER_HOST")
+	if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
+		return host
+	}
+	return "https://" + host
 }

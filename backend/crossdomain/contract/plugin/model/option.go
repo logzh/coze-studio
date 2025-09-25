@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-package plugin
+package model
+
+import "github.com/coze-dev/coze-studio/backend/crossdomain/contract/plugin/consts"
 
 type ExecuteToolOption struct {
 	ProjectInfo *ProjectInfo
@@ -23,18 +25,17 @@ type ExecuteToolOption struct {
 
 	ToolVersion                string
 	Operation                  *Openapi3Operation
-	InvalidRespProcessStrategy InvalidResponseProcessStrategy
+	InvalidRespProcessStrategy consts.InvalidResponseProcessStrategy
 
-	AgentID        int64
 	ConversationID int64
 }
 
 type ExecuteToolOpt func(o *ExecuteToolOption)
 
 type ProjectInfo struct {
-	ProjectID      int64       // agentID or appID
-	ProjectVersion *string     // if version si nil, use latest version
-	ProjectType    ProjectType // agent or app
+	ProjectID      int64              // agentID or appID
+	ProjectVersion *string            // if version is nil, use latest version
+	ProjectType    consts.ProjectType // agent or app
 
 	ConnectorID int64
 }
@@ -57,7 +58,7 @@ func WithOpenapiOperation(op *Openapi3Operation) ExecuteToolOpt {
 	}
 }
 
-func WithInvalidRespProcessStrategy(strategy InvalidResponseProcessStrategy) ExecuteToolOpt {
+func WithInvalidRespProcessStrategy(strategy consts.InvalidResponseProcessStrategy) ExecuteToolOpt {
 	return func(o *ExecuteToolOption) {
 		o.InvalidRespProcessStrategy = strategy
 	}
@@ -69,9 +70,8 @@ func WithAutoGenRespSchema() ExecuteToolOpt {
 	}
 }
 
-func WithPluginHTTPHeader(agentID, conversationID int64) ExecuteToolOpt {
+func WithPluginHTTPHeader(conversationID int64) ExecuteToolOpt {
 	return func(o *ExecuteToolOption) {
-		o.AgentID = agentID
 		o.ConversationID = conversationID
 	}
 }

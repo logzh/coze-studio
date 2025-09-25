@@ -14,17 +14,20 @@
  * limitations under the License.
  */
 
-package conf
+package tool
 
 import (
-	"os"
-	"strings"
+	"context"
+	"errors"
 )
 
-func GetServerHost() string {
-	host := os.Getenv("SERVER_HOST")
-	if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
-		return host
-	}
-	return "https://" + host
+type mcpCallImpl struct{}
+
+func NewMcpCallImpl() Invocation {
+	return &mcpCallImpl{}
+}
+
+func (m *mcpCallImpl) Do(ctx context.Context, args *InvocationArgs) (request string, resp string, err error) {
+	// only for tool debug scene
+	return "", "", errors.New("mcp call not implemented")
 }

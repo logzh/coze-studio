@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-package entity
+package tool
 
-type SortField string
-
-const (
-	SortByCreatedAt SortField = "created_at"
-	SortByUpdatedAt SortField = "updated_at"
+import (
+	"context"
 )
 
-type OAuthProvider string
+type Invocation interface {
+	Do(ctx context.Context, args *InvocationArgs) (request string, resp string, err error)
+}

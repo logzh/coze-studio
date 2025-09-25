@@ -111,7 +111,7 @@ func (a *OpenapiAgentRunApplication) checkConversation(ctx context.Context, ar *
 	}
 
 	if conversationData.CreatorID != userID {
-		return nil, errorx.New(errno.ErrConversationPermissionCode, errorx.KV("msg","user not match"))
+		return nil, errorx.New(errno.ErrConversationPermissionCode, errorx.KV("msg", "user not match"))
 	}
 
 	return conversationData, nil
@@ -148,24 +148,44 @@ func (a *OpenapiAgentRunApplication) buildAgentRunRequest(ctx context.Context, a
 		return nil, err
 	}
 	displayContent := a.buildDisplayContent(ctx, ar)
+	chatflowParameters, err := parseChatflowParameters(ctx, ar)
+	if err != nil {
+		return nil, err
+	}
 	arm := &entity.AgentRunMeta{
-		ConversationID:     ptr.From(ar.ConversationID),
-		AgentID:            ar.BotID,
-		Content:            multiContent,
-		DisplayContent:     displayContent,
-		SpaceID:            spaceID,
-		UserID:             ar.User,
-		SectionID:          conversationData.SectionID,
-		PreRetrieveTools:   shortcutCMDData,
-		IsDraft:            false,
-		ConnectorID:        connectorID,
-		ContentType:        contentType,
-		Ext:                ar.ExtraParams,
+		ConversationID:   ptr.From(ar.ConversationID),
+		AgentID:          ar.BotID,
+		Content:          multiContent,
+		DisplayContent:   displayContent,
+		SpaceID:          spaceID,
+		UserID:           ar.User,
+		SectionID:        conversationData.SectionID,
+		PreRetrieveTools: shortcutCMDData,
+		IsDraft:          false,
+		ConnectorID:      connectorID,
+		ContentType:      contentType,
+		Ext: func() map[string]string {
+			if ar.ExtraParams == nil {
+				return map[string]string{}
+			}
+			return ar.ExtraParams
+		}(),
 		CustomVariables:    ar.CustomVariables,
 		CozeUID:            conversationData.CreatorID,
 		AdditionalMessages: filterMultiAdditionalMessages,
+		ChatflowParameters: chatflowParameters,
 	}
 	return arm, nil
+}
+func parseChatflowParameters(ctx context.Context, ar *run.ChatV3Request) (map[string]any, error) {
+	parameters := make(map[string]any)
+	if ar.Parameters != nil {
+		if err := json.Unmarshal([]byte(*ar.Parameters), &parameters); err != nil {
+			return nil, errors.New("parameters field should be an object, not a string")
+		}
+		return parameters,nil
+	}
+	return parameters,nil
 }
 
 func (a *OpenapiAgentRunApplication) buildTools(ctx context.Context, shortcmd *run.ShortcutCommandDetail) ([]*entity.Tool, error) {
