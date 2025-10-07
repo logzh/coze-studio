@@ -83,7 +83,6 @@ import (
 	pluginmodel "github.com/coze-dev/coze-studio/backend/crossdomain/contract/plugin/model"
 	"github.com/coze-dev/coze-studio/backend/crossdomain/contract/plugin/pluginmock"
 	crossuser "github.com/coze-dev/coze-studio/backend/crossdomain/contract/user"
-	"github.com/coze-dev/coze-studio/backend/crossdomain/impl/code"
 	pluginImpl "github.com/coze-dev/coze-studio/backend/crossdomain/impl/plugin"
 	agententity "github.com/coze-dev/coze-studio/backend/domain/conversation/agentrun/entity"
 	conventity "github.com/coze-dev/coze-studio/backend/domain/conversation/conversation/entity"
@@ -101,16 +100,16 @@ import (
 	"github.com/coze-dev/coze-studio/backend/domain/workflow/service"
 	"github.com/coze-dev/coze-studio/backend/domain/workflow/variable"
 	mockvar "github.com/coze-dev/coze-studio/backend/domain/workflow/variable/varmock"
-	"github.com/coze-dev/coze-studio/backend/infra/contract/coderunner"
-	"github.com/coze-dev/coze-studio/backend/infra/contract/modelmgr"
-	"github.com/coze-dev/coze-studio/backend/infra/impl/cache/redis"
-	"github.com/coze-dev/coze-studio/backend/infra/impl/checkpoint"
-	"github.com/coze-dev/coze-studio/backend/infra/impl/coderunner/direct"
+	"github.com/coze-dev/coze-studio/backend/infra/cache/impl/redis"
+	"github.com/coze-dev/coze-studio/backend/infra/checkpoint"
+	"github.com/coze-dev/coze-studio/backend/infra/coderunner"
+	"github.com/coze-dev/coze-studio/backend/infra/coderunner/impl/direct"
+	"github.com/coze-dev/coze-studio/backend/infra/modelmgr"
 	mockCrossUser "github.com/coze-dev/coze-studio/backend/internal/mock/crossdomain/crossuser"
 	mockPlugin "github.com/coze-dev/coze-studio/backend/internal/mock/domain/plugin"
 	mockcode "github.com/coze-dev/coze-studio/backend/internal/mock/domain/workflow/crossdomain/code"
-	mock "github.com/coze-dev/coze-studio/backend/internal/mock/infra/contract/idgen"
-	storageMock "github.com/coze-dev/coze-studio/backend/internal/mock/infra/contract/storage"
+	mock "github.com/coze-dev/coze-studio/backend/internal/mock/infra/idgen"
+	storageMock "github.com/coze-dev/coze-studio/backend/internal/mock/infra/storage"
 	"github.com/coze-dev/coze-studio/backend/internal/testutil"
 	"github.com/coze-dev/coze-studio/backend/pkg/ctxcache"
 	"github.com/coze-dev/coze-studio/backend/pkg/errorx"
@@ -3837,7 +3836,7 @@ func TestNodeDebugLoop(t *testing.T) {
 			}, nil
 		}).AnyTimes()
 
-		code.SetCodeRunner(runner)
+		coderunner.SetCodeRunner(runner)
 		id := r.load("loop_with_object_input.json")
 		exeID := r.nodeDebug(id, "122149",
 			withNDInput(map[string]string{"input": `[{"a":"1"},{"a":"2"}]`}))
@@ -4154,7 +4153,7 @@ func TestCodeExceptionBranch(t *testing.T) {
 		id := r.load("exception/code_exception_branch.json")
 
 		mockey.PatchConvey("exception branch", func() {
-			code.SetCodeRunner(direct.NewRunner())
+			coderunner.SetCodeRunner(direct.NewRunner())
 
 			exeID := r.testRun(id, map[string]string{"input": "hello"})
 			e := r.getProcess(id, exeID)
@@ -4167,7 +4166,7 @@ func TestCodeExceptionBranch(t *testing.T) {
 
 		mockey.PatchConvey("normal branch", func() {
 			mockCodeRunner := mockcode.NewMockRunner(r.ctrl)
-			mockey.Mock(code.GetCodeRunner).Return(mockCodeRunner).Build()
+			mockey.Mock(coderunner.GetCodeRunner).Return(mockCodeRunner).Build()
 			mockCodeRunner.EXPECT().Run(gomock.Any(), gomock.Any()).Return(&coderunner.RunResponse{
 				Result: map[string]any{
 					"key0": "value0",
@@ -4891,7 +4890,7 @@ func TestHttpImplicitDependencies(t *testing.T) {
 			}, nil
 		}).AnyTimes()
 
-		code.SetCodeRunner(runner)
+		coderunner.SetCodeRunner(runner)
 
 		mockey.PatchConvey("test http node implicit dependencies", func() {
 			input := map[string]string{
@@ -6059,7 +6058,7 @@ func TestWorkflowRunWithFiles(t *testing.T) {
 			}, nil
 		}).AnyTimes()
 
-		mockey.Mock(code.GetCodeRunner).Return(runner).Build()
+		mockey.Mock(coderunner.GetCodeRunner).Return(runner).Build()
 
 		idStr := r.load("workflow_wf_file_name.json")
 		r.publish(idStr, "v0.1.1", true)

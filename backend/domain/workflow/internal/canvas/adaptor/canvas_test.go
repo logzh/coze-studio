@@ -45,14 +45,13 @@ import (
 	mockmodel "github.com/coze-dev/coze-studio/backend/crossdomain/contract/modelmgr/modelmock"
 	crossplugin "github.com/coze-dev/coze-studio/backend/crossdomain/contract/plugin"
 	"github.com/coze-dev/coze-studio/backend/crossdomain/contract/plugin/pluginmock"
-	"github.com/coze-dev/coze-studio/backend/crossdomain/impl/code"
 	userentity "github.com/coze-dev/coze-studio/backend/domain/user/entity"
 	"github.com/coze-dev/coze-studio/backend/domain/workflow"
 	"github.com/coze-dev/coze-studio/backend/domain/workflow/entity/vo"
 	"github.com/coze-dev/coze-studio/backend/domain/workflow/internal/compose"
 	"github.com/coze-dev/coze-studio/backend/domain/workflow/internal/execute"
 	"github.com/coze-dev/coze-studio/backend/domain/workflow/internal/nodes/plugin"
-	"github.com/coze-dev/coze-studio/backend/infra/contract/coderunner"
+	"github.com/coze-dev/coze-studio/backend/infra/coderunner"
 	mockWorkflow "github.com/coze-dev/coze-studio/backend/internal/mock/domain/workflow"
 	mockcode "github.com/coze-dev/coze-studio/backend/internal/mock/domain/workflow/crossdomain/code"
 	"github.com/coze-dev/coze-studio/backend/internal/testutil"
@@ -768,7 +767,7 @@ func TestCodeAndPluginNodes(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		mockCodeRunner := mockcode.NewMockRunner(ctrl)
-		mockey.Mock(code.GetCodeRunner).Return(mockCodeRunner).Build()
+		mockey.Mock(coderunner.GetCodeRunner).Return(mockCodeRunner).Build()
 
 		mockRepo := mockWorkflow.NewMockRepository(ctrl)
 
